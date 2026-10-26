@@ -1,71 +1,98 @@
 "use client";
 
-import Link from "next/link";
 import type { NextPage } from "next";
-import { useAccount } from "wagmi";
-import { BugAntIcon, MagnifyingGlassIcon } from "@heroicons/react/24/outline";
-import { Address } from "~~/components/scaffold-eth";
+import { CreateOrderForm } from "~~/components/escrow/CreateOrderForm";
+import { OrderList } from "~~/components/escrow/OrderList";
+import { WalletPanel } from "~~/components/escrow/WalletPanel";
+import { useEscrowActions } from "~~/hooks/escrow/useEscrowActions";
+import { useEscrowOrders } from "~~/hooks/escrow/useEscrowOrders";
+import { ESCROW_CHAIN_ID } from "~~/types/escrow";
+import { getBlockExplorerTxLink } from "~~/utils/scaffold-eth";
 
 const Home: NextPage = () => {
-  const { address: connectedAddress } = useAccount();
+  const actions = useEscrowActions();
+  const { orderIds, isLoading, eventStatus, eventError } = useEscrowOrders();
+  const explorerLink = actions.lastHash ? getBlockExplorerTxLink(ESCROW_CHAIN_ID, actions.lastHash) : "";
 
   return (
-    <>
-      <div className="flex items-center flex-col grow pt-10">
-        <div className="px-5">
-          <h1 className="text-center">
-            <span className="block text-2xl mb-2">Welcome to</span>
-            <span className="block text-4xl font-bold">Scaffold-ETH 2</span>
-          </h1>
-          <div className="flex justify-center items-center space-x-2 flex-col">
-            <p className="my-2 font-medium">Connected Address:</p>
-            <Address address={connectedAddress} />
-          </div>
-
-          <p className="text-center text-lg">
-            Get started by editing{" "}
-            <code className="italic bg-base-300 text-base font-bold max-w-full break-words break-all inline-block">
-              packages/nextjs/app/page.tsx
-            </code>
-          </p>
-          <p className="text-center text-lg">
-            Edit your smart contract{" "}
-            <code className="italic bg-base-300 text-base font-bold max-w-full break-words break-all inline-block">
-              YourContract.sol
-            </code>{" "}
-            in{" "}
-            <code className="italic bg-base-300 text-base font-bold max-w-full break-words break-all inline-block">
-              packages/hardhat/contracts
-            </code>
-          </p>
+    <div className="mx-auto w-full max-w-6xl px-4 py-8 flex flex-col gap-6">
+      <header className="flex flex-col gap-2">
+        <h1 className="text-3xl font-bold">POTOS Escrow 托管交易</h1>
+        <p className="text-sm opacity-70 max-w-3xl">
+          买家 A、卖家 B、仲裁者 C 使用各自的 MetaMask 钱包访问同一 POTOS 测试网、同一 Escrow 与 hclToken
+          合约。买家创建订单并 approve + deposit 付款，确认收货后代币划给卖家；发生争议时由 arbiter()
+          指定账户裁决退款或放款。
+        </p>
+        <div className="flex flex-wrap gap-2 text-xs">
+          <span className="badge badge-outline">ERC20 托管</span>
+          <span className="badge badge-outline">Chain ID {ESCROW_CHAIN_ID}</span>
+          <span className="badge badge-outline">approve → deposit</span>
+          <span className="badge badge-outline">争议仲裁</span>
         </div>
+      </header>
 
-        <div className="grow bg-base-300 w-full mt-16 px-8 py-12">
-          <div className="flex justify-center items-center gap-12 flex-col md:flex-row">
-            <div className="flex flex-col bg-base-100 px-10 py-10 text-center items-center max-w-xs rounded-3xl">
-              <BugAntIcon className="h-8 w-8 fill-secondary" />
-              <p>
-                Tinker with your smart contract using the{" "}
-                <Link href="/debug" passHref className="link">
-                  Debug Contracts
-                </Link>{" "}
-                tab.
-              </p>
-            </div>
-            <div className="flex flex-col bg-base-100 px-10 py-10 text-center items-center max-w-xs rounded-3xl">
-              <MagnifyingGlassIcon className="h-8 w-8 fill-secondary" />
-              <p>
-                Explore your local transactions with the{" "}
-                <Link href="/blockexplorer" passHref className="link">
-                  Block Explorer
-                </Link>{" "}
-                tab.
-              </p>
-            </div>
+      <WalletPanel />
+
+      <div className="flex flex-col gap-3">
+        {actions.pendingAction && actions.pendingStep && (
+          <div className="alert alert-info">
+            <span className="loading loading-spinner loading-sm" />
+            <span>{actions.pendingStep}</span>
           </div>
-        </div>
+        )}
+
+        {!actions.pendingAction && actions.error && (
+          <div className="alert alert-error">
+            <span className="whitespace-pre-wrap text-sm">{actions.error}</span>
+            <button className="btn btn-ghost btn-xs" onClick={actions.clearError}>
+              关闭
+            </button>
+          </div>
+        )}
+
+        {!actions.pendingAction && !actions.error && actions.lastHash && (
+          <div className="alert alert-success">
+            <span className="text-sm">
+              交易已确认
+              {actions.lastCreatedOrderId !== null
+                ? `，新订单 #${actions.lastCreatedOrderId.toString()} 已写入链上`
+                : ""}
+              。
+            </span>
+            <span className="font-mono text-xs opacity-70">
+              {actions.lastHash.slice(0, 10)}…{actions.lastHash.slice(-6)}
+            </span>
+            {explorerLink && (
+              <a className="link text-sm" href={explorerLink} target="_blank" rel="noreferrer">
+                区块浏览器
+              </a>
+            )}
+          </div>
+        )}
       </div>
-    </>
+
+      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,380px)_minmax(0,1fr)]">
+        <CreateOrderForm actions={actions} />
+        <OrderList
+          orderIds={orderIds}
+          actions={actions}
+          isLoading={isLoading}
+          eventStatus={eventStatus}
+          eventError={eventError}
+        />
+      </div>
+
+      <section className="card bg-base-200/60 border border-base-300">
+        <div className="card-body py-4 text-sm">
+          <h2 className="font-semibold">现场演示提示</h2>
+          <p className="opacity-70">
+            A 创建订单 → A 点击付款并依次确认 approve、deposit 两次钱包弹窗 → B 切换钱包查看 → B 对已付款订单发起争议 →
+            C 切换仲裁者钱包裁决 → A 对无争议订单确认收货。所有按钮均按当前账户与链上状态实时判定， 完整八步与角色说明见
+            README。
+          </p>
+        </div>
+      </section>
+    </div>
   );
 };
 

@@ -5,8 +5,8 @@ import "~~/styles/globals.css";
 import { getMetadata } from "~~/utils/scaffold-eth/getMetadata";
 
 export const metadata = getMetadata({
-  title: "Scaffold-ETH 2 App",
-  description: "Built with 🏗 Scaffold-ETH 2",
+  title: "POTOS Escrow 托管交易",
+  description: "基于 Scaffold-ETH 2 的 ERC20 托管交易与争议仲裁 DApp",
 });
 
 const ScaffoldEthApp = ({ children }: { children: React.ReactNode }) => {
