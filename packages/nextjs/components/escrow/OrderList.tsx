@@ -2,11 +2,13 @@
 
 import type { Address } from "viem";
 import { formatUnits } from "viem";
-import { useAccount } from "wagmi";
+import { OrderDisputeActions } from "~~/components/escrow/OrderDisputeActions";
+import { OrderPaymentActions } from "~~/components/escrow/OrderPaymentActions";
 import { Address as AddressView } from "~~/components/scaffold-eth";
 import type { EscrowActions } from "~~/hooks/escrow/useEscrowActions";
+import { useOrderRoles } from "~~/hooks/escrow/useOrderRoles";
 import { useDeployedContractInfo, useScaffoldReadContract } from "~~/hooks/scaffold-eth";
-import { ESCROW_CHAIN_ID, EscrowOrder, formatDeadline, sameAddress, statusBadge, statusLabel } from "~~/types/escrow";
+import { EscrowOrder, formatDeadline, sameAddress, statusBadge, statusLabel } from "~~/types/escrow";
 import { getParsedError } from "~~/utils/scaffold-eth";
 
 type OrderListProps = {
@@ -17,6 +19,7 @@ type OrderListProps = {
   eventError: unknown;
 };
 
+/** A：订单列表容器与事件同步状态展示 */
 export const OrderList = ({ orderIds, actions, isLoading, eventStatus, eventError }: OrderListProps) => {
   const { data: arbiter } = useScaffoldReadContract({ contractName: "Escrow", functionName: "arbiter" });
   const { data: decimals } = useScaffoldReadContract({ contractName: "hclToken", functionName: "decimals" });
@@ -84,9 +87,8 @@ type OrderCardProps = {
   symbol?: string;
 };
 
+/** A：单笔订单读取、加载/错误分支与数据组装 */
 const OrderCard = ({ id, actions, arbiter, decimals, symbol }: OrderCardProps) => {
-  const { address, chainId, isConnected } = useAccount();
-  const { data: tokenInfo } = useDeployedContractInfo({ contractName: "hclToken" });
   const { data, isLoading, error } = useScaffoldReadContract({
     contractName: "Escrow",
     functionName: "getOrder",
@@ -117,24 +119,35 @@ const OrderCard = ({ id, actions, arbiter, decimals, symbol }: OrderCardProps) =
     description: data.description,
   };
 
+  return <OrderCardContent order={order} actions={actions} arbiter={arbiter} decimals={decimals} symbol={symbol} />;
+};
+
+type OrderCardContentProps = {
+  order: EscrowOrder;
+  actions: EscrowActions;
+  arbiter?: Address;
+  decimals?: number;
+  symbol?: string;
+};
+
+/** A 的订单展示 + C 的角色计算 + B/C 的操作按钮 */
+const OrderCardContent = ({ order, actions, arbiter, decimals, symbol }: OrderCardContentProps) => {
+  const roles = useOrderRoles(order, arbiter);
+  const { data: tokenInfo } = useDeployedContractInfo({ contractName: "hclToken" });
+
   // 历史订单 #0 使用了其他代币；不要用 hclToken 的符号误导展示。
   const isActiveToken = !tokenInfo || sameAddress(order.token, tokenInfo.address);
-
-  const isBuyer = sameAddress(address, order.buyer);
-  const isSeller = sameAddress(address, order.seller);
-  const isArbiter = sameAddress(address, arbiter);
-  const wrongNetwork = isConnected && chainId !== ESCROW_CHAIN_ID;
-  const canTransact = isConnected && !wrongNetwork;
   const busy = actions.pendingAction !== null;
   const isPending = actions.pendingAction?.endsWith(`:${order.id}`) ?? false;
   const deadlinePassed = BigInt(Math.floor(Date.now() / 1000)) > order.deadline;
 
-  const showPay = order.status === 0 && isBuyer;
-  const showConfirm = order.status === 1 && isBuyer;
-  const showDispute = order.status === 1 && (isBuyer || isSeller);
-  const showRefund = order.status === 1 && isBuyer && deadlinePassed;
-  const showResolve = order.status === 4 && isArbiter;
-  const hasAction = showPay || showConfirm || showDispute || showRefund || showResolve;
+  // 只用于“无可用操作”提示；真正的按钮条件在 B/C 的 button 组件中。
+  const hasPaymentAction = roles.isBuyer && (order.status === 0 || order.status === 1);
+  const hasDisputeAction =
+    (order.status === 1 && (roles.isBuyer || roles.isSeller)) ||
+    (order.status === 1 && roles.isBuyer && deadlinePassed) ||
+    (order.status === 4 && roles.isArbiter);
+  const hasAction = hasPaymentAction || hasDisputeAction;
 
   return (
     <article className="card bg-base-100 shadow-md border border-base-300">
@@ -145,9 +158,9 @@ const OrderCard = ({ id, actions, arbiter, decimals, symbol }: OrderCardProps) =
             <span className={`badge ${statusBadge(order.status)}`}>{statusLabel(order.status)}</span>
           </div>
           <div className="flex flex-wrap gap-1">
-            {isBuyer && <span className="badge badge-primary badge-sm">你是买家</span>}
-            {isSeller && <span className="badge badge-secondary badge-sm">你是卖家</span>}
-            {isArbiter && <span className="badge badge-accent badge-sm">你是仲裁者</span>}
+            {roles.isBuyer && <span className="badge badge-primary badge-sm">你是买家</span>}
+            {roles.isSeller && <span className="badge badge-secondary badge-sm">你是卖家</span>}
+            {roles.isArbiter && <span className="badge badge-accent badge-sm">你是仲裁者</span>}
           </div>
         </div>
 
@@ -192,54 +205,37 @@ const OrderCard = ({ id, actions, arbiter, decimals, symbol }: OrderCardProps) =
         )}
 
         <div className="flex flex-wrap items-center gap-2 border-t border-base-300 pt-3">
-          {!isConnected && <span className="text-xs opacity-60">连接钱包后显示可用操作。</span>}
-          {isConnected && wrongNetwork && (
+          {!roles.isConnected && <span className="text-xs opacity-60">连接钱包后显示可用操作。</span>}
+          {roles.isConnected && roles.wrongNetwork && (
             <span className="text-xs text-warning">请先在顶部切换到 POTOS 测试网，交易按钮已禁用。</span>
           )}
-          {canTransact && !hasAction && (
+          {roles.canTransact && !hasAction && (
             <span className="text-xs opacity-60">
               {order.status >= 2
                 ? "订单已结束，无可用操作。"
-                : isBuyer || isSeller
+                : roles.isBuyer || roles.isSeller
                   ? "当前状态无可执行操作。"
                   : "当前账户与该订单无角色关系。"}
             </span>
           )}
 
-          {showPay && (
-            <button className="btn btn-primary btn-sm" disabled={busy} onClick={() => actions.pay(order)}>
-              付款（approve → deposit）
-            </button>
-          )}
-          {showConfirm && (
-            <button className="btn btn-success btn-sm" disabled={busy} onClick={() => actions.confirm(order)}>
-              确认收货
-            </button>
-          )}
-          {showDispute && (
-            <button className="btn btn-error btn-outline btn-sm" disabled={busy} onClick={() => actions.dispute(order)}>
-              发起争议
-            </button>
-          )}
-          {showRefund && (
-            <button
-              className="btn btn-warning btn-outline btn-sm"
-              disabled={busy}
-              onClick={() => actions.refund(order)}
-            >
-              超时退款
-            </button>
-          )}
-          {showResolve && (
-            <>
-              <button className="btn btn-success btn-sm" disabled={busy} onClick={() => actions.resolve(order, true)}>
-                判卖家胜（放款）
-              </button>
-              <button className="btn btn-warning btn-sm" disabled={busy} onClick={() => actions.resolve(order, false)}>
-                判买家胜（退款）
-              </button>
-            </>
-          )}
+          <OrderPaymentActions
+            order={order}
+            actions={actions}
+            isBuyer={roles.isBuyer}
+            canTransact={roles.canTransact}
+            busy={busy}
+          />
+          <OrderDisputeActions
+            order={order}
+            actions={actions}
+            isBuyer={roles.isBuyer}
+            isSeller={roles.isSeller}
+            isArbiter={roles.isArbiter}
+            canTransact={roles.canTransact}
+            deadlinePassed={deadlinePassed}
+            busy={busy}
+          />
         </div>
       </div>
     </article>

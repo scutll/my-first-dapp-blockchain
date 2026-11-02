@@ -169,24 +169,48 @@ A/B/C 三个账户都需要少量 POT 作为 gas。hclToken 只由 owner 增发�
 7. **Hardhat 源码与当前部署的差异**：仓库 `contracts/MXLToken.sol` 与 `deploy/` 脚本是课程原始 `MXLToken` 流程；当前前端连接的是已部署的 `hclToken`（同 ERC20 ABI）。若重新部署，需要同步调整代币名称/仲裁者并重新生成 `deployedContracts.ts`。
 8. **未由代码模型执行的项目**：真实 MetaMask 签名、POTOS 浏览器截图和本次八步演示的交易哈希需在用户钱包环境完成；未执行前均标注“待实测”。
 
-## 8. 目录
+## 8. 目录与职责拆分
+
+代码已按单一职责拆分，原来的混合文件 `OrderList.tsx` / `useEscrowActions.ts` 已不再承担全部角色。
 
 ```text
 packages/
 ├── hardhat/
-│   ├── contracts/Escrow.sol          # 托管合约
-│   ├── contracts/MXLToken.sol        # 课程原始 ERC20 源码
-│   ├── deploy/01_deploy_token.ts
-│   └── deploy/02_deploy_escrow.ts
+│   ├── contracts/Escrow.sol              # 共享核心：托管合约
+│   ├── contracts/MXLToken.sol            # 共享核心：ERC20 源码
+│   ├── deploy/01_deploy_token.ts         # 共享部署
+│   ├── deploy/02_deploy_escrow.ts        # 共享部署
+│   ├── test/fixtures.ts                  # 共享测试 fixture
+│   ├── test/OrderLifecycle.ts            # B：创建/付款/确认测试
+│   └── test/Dispute.ts                   # C：退款/争议/仲裁测试
 └── nextjs/
-    ├── app/page.tsx                  # Escrow 单页入口
+    ├── app/page.tsx                      # 共享集成入口
+    ├── app/layout.tsx                    # 共享布局
+    ├── components/Header.tsx             # 共享页头
     ├── components/escrow/
-    │   ├── WalletPanel.tsx           # 钱包、网络、仲裁者、余额
-    │   ├── CreateOrderForm.tsx       # 创建订单
-    │   └── OrderList.tsx             # 订单列表 + 全部角色按钮
+    │   ├── WalletPanel.tsx               # C：钱包、网络、仲裁者、角色、余额
+    │   ├── CreateOrderForm.tsx           # B：创建订单
+    │   ├── OrderList.tsx                 # A：订单列表、逐笔 getOrder、卡片展示
+    │   ├── OrderPaymentActions.tsx       # B：付款/确认按钮
+    │   └── OrderDisputeActions.tsx       # C：争议/仲裁/超时退款按钮
     ├── hooks/escrow/
-    │   ├── useEscrowOrders.ts        # 事件 + orderCount 订单发现
-    │   └── useEscrowActions.ts       # 全部写交易
-    ├── types/escrow.ts               # 订单类型、状态、部署区块
-    └── contracts/deployedContracts.ts# 自动生成的地址/ABI
+    │   ├── useEscrowTx.ts                # 共享交易基础设施
+    │   ├── useEscrowActions.ts           # 共享组合入口
+    │   ├── useOrderActions.ts            # B：create / pay / confirm
+    │   ├── useDisputeActions.ts          # C：dispute / resolve / refund
+    │   ├── useOrderRoles.ts              # C：角色与可交易性判断
+    │   └── useEscrowOrders.ts            # A：事件 + orderCount 订单发现
+    ├── types/escrow.ts                   # 共享类型、状态、部署区块
+    └── contracts/deployedContracts.ts    # 共享地址/ABI
 ```
+
+## 9. 三人分工与 Git 分支
+
+| 成员 | 职责 | 主要文件 | 建议分支 |
+|---|---|---|---|
+| A | 订单列表与读数据 | `OrderList.tsx`、`useEscrowOrders.ts` | `feat/order-list-read` |
+| B | 创建、付款、确认 | `CreateOrderForm.tsx`、`OrderPaymentActions.tsx`、`useOrderActions.ts`、`test/OrderLifecycle.ts` | `feat/payment-flow` |
+| C | 争议、仲裁、角色判断与报告 | `WalletPanel.tsx`、`OrderDisputeActions.tsx`、`useDisputeActions.ts`、`useOrderRoles.ts`、`test/Dispute.ts`、`README.md` | `feat/dispute-arbitration` |
+| 共享 | 类型、ABI、网络配置、合约、部署、测试 fixture、页面集成 | `types/escrow.ts`、`deployedContracts.ts`、`scaffold.config.ts`、`Escrow.sol`、`MXLToken.sol`、`deploy/`、`test/fixtures.ts`、`app/page.tsx`、`app/layout.tsx`、`Header.tsx`、`useEscrowTx.ts`、`useEscrowActions.ts` | `base/shared` |
+
+共享文件由集成者提交；A/B/C 三位成员应使用自己的 GitHub 账号提交各自分支，不使用伪造的作者信息。
