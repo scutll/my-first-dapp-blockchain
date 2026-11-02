@@ -1,6 +1,6 @@
 "use client";
 
-import type { EscrowActions } from "~~/hooks/escrow/useEscrowActions";
+import type { EscrowActions } from "~~/types/escrow";
 import type { EscrowOrder } from "~~/types/escrow";
 
 type OrderDisputeActionsProps = {

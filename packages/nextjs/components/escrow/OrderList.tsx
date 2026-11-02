@@ -5,9 +5,9 @@ import { formatUnits } from "viem";
 import { OrderDisputeActions } from "~~/components/escrow/OrderDisputeActions";
 import { OrderPaymentActions } from "~~/components/escrow/OrderPaymentActions";
 import { Address as AddressView } from "~~/components/scaffold-eth";
-import type { EscrowActions } from "~~/hooks/escrow/useEscrowActions";
 import { useOrderRoles } from "~~/hooks/escrow/useOrderRoles";
 import { useDeployedContractInfo, useScaffoldReadContract } from "~~/hooks/scaffold-eth";
+import type { EscrowActions } from "~~/types/escrow";
 import { EscrowOrder, formatDeadline, sameAddress, statusBadge, statusLabel } from "~~/types/escrow";
 import { getParsedError } from "~~/utils/scaffold-eth";
 

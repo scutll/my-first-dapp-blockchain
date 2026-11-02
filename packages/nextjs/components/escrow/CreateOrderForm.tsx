@@ -2,8 +2,8 @@
 
 import { FormEvent, useState } from "react";
 import { useAccount } from "wagmi";
-import type { EscrowActions } from "~~/hooks/escrow/useEscrowActions";
 import { useScaffoldReadContract } from "~~/hooks/scaffold-eth";
+import type { EscrowActions } from "~~/types/escrow";
 import { ESCROW_CHAIN_ID } from "~~/types/escrow";
 
 type CreateOrderFormProps = {

@@ -1,5 +1,6 @@
 "use client";
 
+import type { Hash } from "viem";
 import type { EscrowTx } from "~~/hooks/escrow/useEscrowTx";
 import { EscrowOrder, sameAddress } from "~~/types/escrow";
 
@@ -7,10 +8,15 @@ import { EscrowOrder, sameAddress } from "~~/types/escrow";
 export function useDisputeActions(tx: EscrowTx) {
   const { address, arbiter, run, ensureWallet, resetFeedback, setError } = tx;
 
-  const dispute = async (order: EscrowOrder) => {
+  const fail = (message: string) => {
+    setError(message);
+    return undefined;
+  };
+
+  const dispute = async (order: EscrowOrder): Promise<Hash | undefined> => {
     if (!sameAddress(address, order.buyer) && !sameAddress(address, order.seller)) {
       resetFeedback();
-      return setError("只有该订单的买家或卖家可以发起争议");
+      return fail("只有该订单的买家或卖家可以发起争议");
     }
     return run(`dispute:${order.id}`, "等待钱包确认 dispute…", async () => {
       await ensureWallet(address);
@@ -18,10 +24,10 @@ export function useDisputeActions(tx: EscrowTx) {
     });
   };
 
-  const resolve = async (order: EscrowOrder, sellerWins: boolean) => {
+  const resolve = async (order: EscrowOrder, sellerWins: boolean): Promise<Hash | undefined> => {
     if (!sameAddress(address, arbiter)) {
       resetFeedback();
-      return setError("只有仲裁者可以裁决");
+      return fail("只有仲裁者可以裁决");
     }
     return run(
       `resolve-${sellerWins}:${order.id}`,
@@ -34,14 +40,14 @@ export function useDisputeActions(tx: EscrowTx) {
     );
   };
 
-  const refund = async (order: EscrowOrder) => {
+  const refund = async (order: EscrowOrder): Promise<Hash | undefined> => {
     if (!sameAddress(address, order.buyer)) {
       resetFeedback();
-      return setError("只有该订单的买家可以超时退款");
+      return fail("只有该订单的买家可以超时退款");
     }
     if (BigInt(Math.floor(Date.now() / 1000)) <= order.deadline) {
       resetFeedback();
-      return setError("尚未超过订单截止时间，不能退款");
+      return fail("尚未超过订单截止时间，不能退款");
     }
     return run(`refund:${order.id}`, "等待钱包确认 refund…", async () => {
       await ensureWallet(order.buyer);

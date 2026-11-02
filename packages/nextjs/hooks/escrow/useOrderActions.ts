@@ -1,18 +1,11 @@
 "use client";
 
-import type { Address } from "viem";
+import type { Address, Hash } from "viem";
 import { getAddress, isAddress, parseUnits } from "viem";
 import type { EscrowTx } from "~~/hooks/escrow/useEscrowTx";
-import { EscrowOrder, sameAddress } from "~~/types/escrow";
+import { CreateOrderInput, EscrowOrder, sameAddress } from "~~/types/escrow";
 
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
-
-export type CreateOrderInput = {
-  seller: string;
-  amount: string;
-  deadlineMinutes: string;
-  description: string;
-};
 
 /** B：创建订单、approve + deposit 付款、确认收货 */
 export function useOrderActions(tx: EscrowTx) {
@@ -32,24 +25,29 @@ export function useOrderActions(tx: EscrowTx) {
     setError,
   } = tx;
 
-  const createOrder = async (input: CreateOrderInput) => {
+  const fail = (message: string) => {
+    setError(message);
+    return undefined;
+  };
+
+  const createOrder = async (input: CreateOrderInput): Promise<Hash | undefined> => {
     resetFeedback();
-    if (!address) return setError("请先连接钱包");
-    if (!escrowInfo || !tokenInfo) return setError("合约信息未加载，请刷新页面");
-    if (tokenDecimals === undefined) return setError("代币精度未加载，请稍后重试");
+    if (!address) return fail("请先连接钱包");
+    if (!escrowInfo || !tokenInfo) return fail("合约信息未加载，请刷新页面");
+    if (tokenDecimals === undefined) return fail("代币精度未加载，请稍后重试");
 
     const sellerText = input.seller.trim();
     if (!isAddress(sellerText) || sameAddress(sellerText, ZERO_ADDRESS)) {
-      return setError("请输入有效的卖家地址（不能是零地址）");
+      return fail("请输入有效的卖家地址（不能是零地址）");
     }
-    if (sameAddress(sellerText, address)) return setError("卖家不能是当前买家");
+    if (sameAddress(sellerText, address)) return fail("卖家不能是当前买家");
 
     const amountNumber = Number(input.amount);
     if (!input.amount.trim() || !Number.isFinite(amountNumber) || amountNumber <= 0) {
-      return setError("金额必须大于 0");
+      return fail("金额必须大于 0");
     }
     const minutes = Number(input.deadlineMinutes);
-    if (!Number.isFinite(minutes) || minutes <= 0) return setError("期限必须大于 0 分钟");
+    if (!Number.isFinite(minutes) || minutes <= 0) return fail("期限必须大于 0 分钟");
 
     let seller: Address;
     let amount: bigint;
@@ -57,7 +55,7 @@ export function useOrderActions(tx: EscrowTx) {
       seller = getAddress(sellerText);
       amount = parseUnits(input.amount.trim(), tokenDecimals);
     } catch {
-      return setError("金额格式不正确（小数位不能超过代币精度）");
+      return fail("金额格式不正确（小数位不能超过代币精度）");
     }
 
     const deadline = BigInt(Math.floor(Date.now() / 1000) + Math.ceil(minutes * 60));
@@ -83,10 +81,10 @@ export function useOrderActions(tx: EscrowTx) {
     });
   };
 
-  const pay = async (order: EscrowOrder) => {
+  const pay = async (order: EscrowOrder): Promise<Hash | undefined> => {
     if (!sameAddress(address, order.buyer)) {
       resetFeedback();
-      return setError("只有该订单的买家可以付款");
+      return fail("只有该订单的买家可以付款");
     }
 
     return run(`pay:${order.id}`, "步骤 1/2：检查授权额度…", async () => {
@@ -123,10 +121,10 @@ export function useOrderActions(tx: EscrowTx) {
     });
   };
 
-  const confirm = async (order: EscrowOrder) => {
+  const confirm = async (order: EscrowOrder): Promise<Hash | undefined> => {
     if (!sameAddress(address, order.buyer)) {
       resetFeedback();
-      return setError("只有该订单的买家可以确认收货");
+      return fail("只有该订单的买家可以确认收货");
     }
     return run(`confirm:${order.id}`, "等待钱包确认 confirm…", async () => {
       await ensureWallet(order.buyer);

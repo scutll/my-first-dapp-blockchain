@@ -1,4 +1,4 @@
-import type { Address } from "viem";
+import type { Address, Hash } from "viem";
 
 /** POTOS 测试网与 Escrow 部署信息（与 deployedContracts.ts / deployments 保持一致） */
 export const ESCROW_CHAIN_ID = 60600;
@@ -31,6 +31,30 @@ export type EscrowOrder = {
   deadline: bigint;
   status: number;
   description: string;
+};
+
+/** B：创建订单表单输入 */
+export type CreateOrderInput = {
+  seller: string;
+  amount: string;
+  deadlineMinutes: string;
+  description: string;
+};
+
+/** A/B/C 共用接口：页面只依赖此类型，不反向依赖具体 action hook */
+export type EscrowActions = {
+  createOrder: (input: CreateOrderInput) => Promise<Hash | undefined>;
+  pay: (order: EscrowOrder) => Promise<Hash | undefined>;
+  confirm: (order: EscrowOrder) => Promise<Hash | undefined>;
+  dispute: (order: EscrowOrder) => Promise<Hash | undefined>;
+  resolve: (order: EscrowOrder, sellerWins: boolean) => Promise<Hash | undefined>;
+  refund: (order: EscrowOrder) => Promise<Hash | undefined>;
+  pendingAction: string | null;
+  pendingStep: string | null;
+  lastHash: Hash | null;
+  lastCreatedOrderId: bigint | null;
+  error: string | null;
+  clearError: () => void;
 };
 
 export const statusLabel = (status: number) => ORDER_STATUS_LABELS[status] ?? `未知状态 ${status}`;
