@@ -21,3 +21,17 @@ node_modules
 
 # cli
 dist
+
+# local secrets
+.env
+.env.*
+!.env.example
+
+# local-only notes, archives, logs, Windows metadata
+task.md
+*.rar
+output.log
+*Zone.Identifier
+
+# generated backups
+deployedContracts_old*.ts
